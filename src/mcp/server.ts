@@ -10,6 +10,7 @@ import { registerFbaInventoryTools } from "./tools/fbaInventory";
 import { registerPricingTools } from "./tools/pricing";
 import { registerFeesTools } from "./tools/fees";
 import { registerReportsTools } from "./tools/reports";
+import { registerFeedsTools } from "./tools/feeds";
 
 export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer {
   const server = new McpServer({ name: "amazon-seller-mcp", version: "0.1.0" });
@@ -22,6 +23,7 @@ export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer
   registerPricingTools(server, client, config);
   registerFeesTools(server, client, config);
   registerReportsTools(server, client, config);
+  registerFeedsTools(server, client, config);
 
   return server;
 }
