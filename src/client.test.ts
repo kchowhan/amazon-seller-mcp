@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { SpApiClient, buildUrl } from "./client";
 import type { LwaTokenClient } from "./auth/lwaTokenClient";
+import { SpApiError } from "./errors";
 
 const endpoints = {
   spApiBaseUrl: "https://sandbox.sellingpartnerapi-na.amazon.com",
@@ -27,6 +28,11 @@ describe("buildUrl", () => {
       skip: undefined,
     });
     expect(url).toBe("https://h.example.com/a/b?marketplaceIds=M1%2CM2&n=5");
+  });
+
+  it("omits empty array params entirely", () => {
+    const url = buildUrl("https://h.example.com", "/a", { marketplaceIds: [] });
+    expect(url).toBe("https://h.example.com/a");
   });
 });
 
@@ -71,6 +77,39 @@ describe("SpApiClient.request", () => {
     });
 
     expect(result.payload).toBe(42);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws after exhausting retries on repeated 429", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response("throttled", { status: 429 }));
+    const client = new SpApiClient(endpoints, fakeTokenClient(), fetchFn, {
+      sleepFn: async () => {},
+    });
+
+    await expect(
+      client.request({ operation: "ping", method: "GET", path: "/x" }),
+    ).rejects.toSatisfy(
+      (e: unknown) => e instanceof SpApiError && e.status === 429,
+    );
+    expect(fetchFn).toHaveBeenCalledTimes(4); // 1 initial + 3 retries
+  });
+
+  it("retries on 5xx then succeeds", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("server error", { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse({ payload: 99 }));
+    const client = new SpApiClient(endpoints, fakeTokenClient(), fetchFn, {
+      sleepFn: async () => {},
+    });
+
+    const result = await client.request<{ payload: number }>({
+      operation: "ping",
+      method: "GET",
+      path: "/x",
+    });
+
+    expect(result.payload).toBe(99);
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 });

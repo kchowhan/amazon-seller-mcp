@@ -1,6 +1,5 @@
 // src/rateLimiter.ts
-import type { Clock } from "./auth/lwaTokenClient";
-import { systemClock } from "./auth/lwaTokenClient";
+import { systemClock, type Clock } from "./clock";
 
 export type SleepLike = (ms: number) => Promise<void>;
 export const sleep: SleepLike = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,5 +1,6 @@
 // src/auth/lwaTokenClient.ts
 import { SpApiError } from "../errors";
+import { systemClock, type Clock } from "../clock";
 
 export interface TokenResponse {
   access_token: string;
@@ -8,10 +9,7 @@ export interface TokenResponse {
 }
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
-export interface Clock {
-  now(): number;
-}
-export const systemClock: Clock = { now: () => Date.now() };
+export type { Clock };
 
 type LwaCreds = { lwaClientId: string; lwaClientSecret: string; refreshToken: string };
 
@@ -28,6 +26,8 @@ export class LwaTokenClient {
   ) {}
 
   async getAccessToken(): Promise<string> {
+    // Amazon issues 1-hour (3600s) access tokens. A token whose lifetime is at or below
+    // SAFETY_MS is effectively never cached (a fresh token is fetched each call).
     if (this.cached && this.clock.now() < this.cached.expiresAt - SAFETY_MS) {
       return this.cached.token;
     }
@@ -60,10 +60,11 @@ export class LwaTokenClient {
     if (!res.ok) {
       const text = await res.text();
       throw new SpApiError(
-        `LWA token request failed: ${text}`,
+        `LWA token request failed with status ${res.status}`,
         res.status,
         "LWA_TOKEN_ERROR",
         SpApiError.isRetryable(res.status),
+        text,
       );
     }
     const json = (await res.json()) as TokenResponse;

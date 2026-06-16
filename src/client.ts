@@ -1,6 +1,7 @@
 // src/client.ts
 import type { Endpoints } from "./endpoints";
-import type { LwaTokenClient, FetchLike, Clock } from "./auth/lwaTokenClient";
+import type { LwaTokenClient, FetchLike } from "./auth/lwaTokenClient";
+import type { Clock } from "./clock";
 import { SpApiError } from "./errors";
 import { TokenBucket, sleep, type SleepLike } from "./rateLimiter";
 
@@ -22,7 +23,12 @@ export function buildUrl(
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined) continue;
-      url.searchParams.set(key, Array.isArray(value) ? value.join(",") : String(value));
+      if (Array.isArray(value)) {
+        if (value.length === 0) continue;
+        url.searchParams.set(key, value.join(","));
+      } else {
+        url.searchParams.set(key, String(value));
+      }
     }
   }
   return url.toString();
@@ -71,7 +77,8 @@ export class SpApiClient {
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
 
-      if (res.status === 429 && attempt < maxRetries) {
+      const isTransient = res.status === 429 || res.status >= 500;
+      if (isTransient && attempt < maxRetries) {
         attempt += 1;
         await sleepFn(2 ** attempt * 100);
         continue;
@@ -79,10 +86,11 @@ export class SpApiClient {
       if (!res.ok) {
         const text = await res.text();
         throw new SpApiError(
-          `SP-API ${options.operation} failed: ${text}`,
+          `SP-API ${options.operation} failed with status ${res.status}`,
           res.status,
           undefined,
           SpApiError.isRetryable(res.status),
+          text,
         );
       }
       return (await res.json()) as T;

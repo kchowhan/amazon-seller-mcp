@@ -44,11 +44,11 @@ describe("LwaTokenClient", () => {
     const client = new LwaTokenClient(creds, tokenUrl, fetchFn, clock);
 
     expect(await client.getAccessToken()).toBe("AT1");
-    clock.advance(1000 * 1000); // well before the 3600s - 60s safety window
+    clock.advance(1000 * 1000); // advances 1000s — still within the 3540s (3600 - 60 safety) valid window
     expect(await client.getAccessToken()).toBe("AT1");
     expect(fetchFn).toHaveBeenCalledTimes(1);
 
-    clock.advance(3600 * 1000); // now past expiry
+    clock.advance(3600 * 1000); // advances another 3600s — now past expiry (1000s + 3600s > 3540s safety threshold)
     expect(await client.getAccessToken()).toBe("AT2");
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });

@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { connectionStatusTool, sellersGetMarketplacesTool } from "./tools";
 import type { SpApiClient } from "../client";
 import type { SpApiConfig } from "../config";
+import { SpApiError } from "../errors";
 
 const config: SpApiConfig = {
   lwaClientId: "id",
@@ -37,5 +38,23 @@ describe("sellersGetMarketplacesTool", () => {
 
     const result = await sellersGetMarketplacesTool(client);
     expect(result.content[0]!.text).toContain("Amazon.com");
+  });
+
+  it("returns isError and a body-free message when the client rejects with SpApiError", async () => {
+    const request = vi.fn().mockRejectedValue(
+      new SpApiError(
+        "SP-API getMarketplaceParticipations failed with status 403",
+        403,
+        undefined,
+        false,
+        "<body>",
+      ),
+    );
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await sellersGetMarketplacesTool(client);
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toMatch(/^Error:/);
+    expect(result.content[0]!.text).not.toContain("<body>");
   });
 });
