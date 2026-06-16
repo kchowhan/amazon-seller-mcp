@@ -4,7 +4,7 @@
 //
 // GRANTLESS ops (scope: sellingpartnerapi::notifications):
 //   getDestinations, createDestination, deleteDestination,
-//   getSubscriptionById, deleteSubscriptionById
+//   deleteSubscriptionById
 // SELLER-AUTHORIZED ops (no grantless):
 //   createSubscription, getSubscription
 import type { SpApiClient } from "../client";

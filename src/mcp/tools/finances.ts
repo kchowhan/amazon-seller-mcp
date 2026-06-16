@@ -8,7 +8,6 @@ import { textResult, errorResult, type ToolResult } from "../toolResult";
 
 export async function financeListEventsTool(
   client: SpApiClient,
-  _config: SpApiConfig,
   args: {
     postedAfter?: string;
     postedBefore?: string;
@@ -61,6 +60,6 @@ export function registerFinancesTools(
           .describe("Pagination token from a previous response"),
       },
     },
-    async (args) => financeListEventsTool(client, config, args),
+    async (args) => financeListEventsTool(client, args),
   );
 }

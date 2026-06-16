@@ -3,6 +3,8 @@
 import { gunzipSync } from "node:zlib";
 import type { FetchLike } from "../auth/lwaTokenClient";
 
+const MAX_DOCUMENT_BYTES = 100 * 1024 * 1024; // 100 MB
+
 // Download a report/feed-result document from its presigned URL and decompress if needed.
 export async function downloadDocument(
   url: string,
@@ -11,6 +13,13 @@ export async function downloadDocument(
 ): Promise<string> {
   const res = await fetchFn(url, { method: "GET" });
   if (!res.ok) throw new Error(`Document download failed with status ${res.status}`);
+  const contentLength = res.headers.get("content-length");
+  if (contentLength !== null) {
+    const bytes = parseInt(contentLength, 10);
+    if (bytes > MAX_DOCUMENT_BYTES) {
+      throw new Error(`Document too large: ${bytes} bytes exceeds 100MB limit`);
+    }
+  }
   const buf = Buffer.from(await res.arrayBuffer());
   const bytes = compressionAlgorithm === "GZIP" ? gunzipSync(buf) : buf;
   return bytes.toString("utf-8");

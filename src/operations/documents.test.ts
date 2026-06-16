@@ -30,6 +30,22 @@ describe("downloadDocument", () => {
       downloadDocument("https://s3.example.com/doc", undefined, fetchFn),
     ).rejects.toThrow("Document download failed with status 403");
   });
+
+  it("throws when content-length exceeds 100MB without reading the body", async () => {
+    const oversizeBytes = 100 * 1024 * 1024 + 1;
+    const arrayBufferFn = vi.fn();
+    const mockRes = {
+      ok: true,
+      status: 200,
+      headers: { get: (name: string) => (name === "content-length" ? String(oversizeBytes) : null) },
+      arrayBuffer: arrayBufferFn,
+    } as unknown as Response;
+    const fetchFn = vi.fn().mockResolvedValue(mockRes);
+    await expect(
+      downloadDocument("https://s3.example.com/huge", undefined, fetchFn),
+    ).rejects.toThrow(`Document too large: ${oversizeBytes} bytes exceeds 100MB limit`);
+    expect(arrayBufferFn).not.toHaveBeenCalled();
+  });
 });
 
 describe("uploadDocument", () => {

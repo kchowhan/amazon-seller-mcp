@@ -124,6 +124,23 @@ describe("reportGetDocumentTool", () => {
     expect(parsed.content).toContain("[truncated]");
   });
 
+  it("returns null-document guard when DONE but reportDocumentId is undefined", async () => {
+    const client = mockClient([{
+      reportId: "RPT1",
+      processingStatus: "DONE",
+      reportType: "X",
+      createdTime: "t",
+      // reportDocumentId intentionally absent
+    }]);
+    const fetchFn = vi.fn();
+    const result = await reportGetDocumentTool(client, { reportId: "RPT1" }, fetchFn);
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed.processingStatus).toBe("DONE");
+    expect(parsed.reportDocumentId).toBeNull();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("returns isError when getReport rejects", async () => {
     const client = { request: vi.fn().mockRejectedValue(new Error("fail")) } as unknown as SpApiClient;
     const result = await reportGetDocumentTool(client, { reportId: "RPT1" });

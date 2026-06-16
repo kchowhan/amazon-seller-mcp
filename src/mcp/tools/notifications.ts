@@ -15,7 +15,6 @@ import { textResult, errorResult, type ToolResult } from "../toolResult";
 
 export async function notificationsCreateDestinationTool(
   client: SpApiClient,
-  _config: SpApiConfig,
   args: {
     name: string;
     sqsArn?: string;
@@ -139,7 +138,7 @@ export function registerNotificationsTools(
           .describe("AWS account ID for EventBridge destination"),
       },
     },
-    async (args) => notificationsCreateDestinationTool(client, config, args),
+    async (args) => notificationsCreateDestinationTool(client, args),
   );
 
   server.registerTool(

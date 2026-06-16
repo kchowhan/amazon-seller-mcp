@@ -9,16 +9,6 @@ import {
   notificationsUnsubscribeTool,
 } from "./notifications";
 import type { SpApiClient } from "../../client";
-import type { SpApiConfig } from "../../config";
-
-const config: SpApiConfig = {
-  lwaClientId: "id",
-  lwaClientSecret: "sec",
-  refreshToken: "rt",
-  marketplaceIds: ["ATVPDKIKX0DER"],
-  region: "na",
-  sandbox: false,
-};
 
 function mockClient(response: unknown): SpApiClient {
   return { request: vi.fn().mockResolvedValue(response) } as unknown as SpApiClient;
@@ -29,7 +19,7 @@ const GRANTLESS_SCOPE = "sellingpartnerapi::notifications";
 describe("notificationsCreateDestinationTool", () => {
   it("creates SQS destination and returns payload", async () => {
     const client = mockClient({ payload: { name: "my-dest", destinationId: "D1", resource: {} } });
-    const result = await notificationsCreateDestinationTool(client, config, {
+    const result = await notificationsCreateDestinationTool(client, {
       name: "my-dest",
       sqsArn: "arn:aws:sqs:us-east-1:123:MyQueue",
     });
@@ -44,7 +34,7 @@ describe("notificationsCreateDestinationTool", () => {
 
   it("creates EventBridge destination", async () => {
     const client = mockClient({ payload: { name: "eb-dest", destinationId: "D2", resource: {} } });
-    const result = await notificationsCreateDestinationTool(client, config, {
+    const result = await notificationsCreateDestinationTool(client, {
       name: "eb-dest",
       eventBridgeRegion: "us-east-1",
       eventBridgeAccountId: "123456789012",
@@ -59,7 +49,7 @@ describe("notificationsCreateDestinationTool", () => {
 
   it("returns isError on failure", async () => {
     const client = { request: vi.fn().mockRejectedValue(new Error("bad ARN")) } as unknown as SpApiClient;
-    const result = await notificationsCreateDestinationTool(client, config, {
+    const result = await notificationsCreateDestinationTool(client, {
       name: "d",
       sqsArn: "invalid",
     });
