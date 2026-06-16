@@ -12,6 +12,7 @@ import {
   listingPutTool,
   listingPatchTool,
   listingDeleteTool,
+  productTypeGetSchemaTool,
 } from "./tools";
 
 export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer {
@@ -176,6 +177,31 @@ export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer
       inputSchema: listingCommonInputs,
     },
     async (args) => listingDeleteTool(client, config, args),
+  );
+
+  server.registerTool(
+    "product_type_get_schema",
+    {
+      description:
+        "Get the JSON schema for an Amazon product type (e.g. SHIRT, LUGGAGE). Used to understand what attributes are required/allowed when creating or updating listings. marketplaceIds defaults to configured marketplaces.",
+      inputSchema: {
+        productType: z
+          .string()
+          .describe("Amazon product type name (e.g. SHIRT, LUGGAGE, BACKPACK)"),
+        marketplaceIds: z
+          .array(z.string())
+          .optional()
+          .describe("Marketplace IDs (defaults to configured marketplaces)"),
+        requirements: z
+          .string()
+          .optional()
+          .describe(
+            "Requirements type: LISTING, LISTING_PRODUCT_ONLY, or LISTING_OFFER_ONLY",
+          ),
+        locale: z.string().optional().describe("Locale for localized display labels (e.g. en_US)"),
+      },
+    },
+    async (args) => productTypeGetSchemaTool(client, config, args),
   );
 
   return server;

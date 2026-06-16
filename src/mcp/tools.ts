@@ -11,6 +11,7 @@ import {
   type PutListingsItemBody,
   type PatchListingsItemBody,
 } from "../operations/listings";
+import { getDefinitionsProductType } from "../operations/productTypes";
 import { SpApiError } from "../errors";
 
 export interface ToolResult {
@@ -219,6 +220,29 @@ export async function listingDeleteTool(
       sku: args.sku,
       marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
       issueLocale: args.issueLocale,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function productTypeGetSchemaTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    productType: string;
+    marketplaceIds?: string[];
+    requirements?: string;
+    locale?: string;
+  },
+): Promise<ToolResult> {
+  try {
+    const result = await getDefinitionsProductType(client, {
+      productType: args.productType,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+      requirements: args.requirements,
+      locale: args.locale,
     });
     return textResult(result);
   } catch (err) {
