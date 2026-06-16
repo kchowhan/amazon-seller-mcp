@@ -1,0 +1,91 @@
+// src/client.ts
+import type { Endpoints } from "./endpoints";
+import type { LwaTokenClient, FetchLike, Clock } from "./auth/lwaTokenClient";
+import { SpApiError } from "./errors";
+import { TokenBucket, sleep, type SleepLike } from "./rateLimiter";
+
+export interface RequestOptions {
+  operation: string; // logical name, used for the per-operation rate-limit bucket
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  query?: Record<string, string | number | string[] | undefined>;
+  body?: unknown;
+  rateLimit?: { rate: number; burst: number };
+}
+
+export function buildUrl(
+  base: string,
+  path: string,
+  query?: RequestOptions["query"],
+): string {
+  const url = new URL(path, base);
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined) continue;
+      url.searchParams.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    }
+  }
+  return url.toString();
+}
+
+const DEFAULT_RATE_LIMIT = { rate: 1, burst: 5 };
+const USER_AGENT = "amazon-seller-mcp/0.1 (Language=TypeScript)";
+
+export class SpApiClient {
+  private readonly buckets = new Map<string, TokenBucket>();
+
+  constructor(
+    private readonly endpoints: Endpoints,
+    private readonly tokenClient: LwaTokenClient,
+    private readonly fetchFn: FetchLike = fetch,
+    private readonly opts: { maxRetries?: number; sleepFn?: SleepLike; clock?: Clock } = {},
+  ) {}
+
+  private bucketFor(options: RequestOptions): TokenBucket {
+    let bucket = this.buckets.get(options.operation);
+    if (!bucket) {
+      const limit = options.rateLimit ?? DEFAULT_RATE_LIMIT;
+      bucket = new TokenBucket(limit.rate, limit.burst, this.opts.clock, this.opts.sleepFn);
+      this.buckets.set(options.operation, bucket);
+    }
+    return bucket;
+  }
+
+  async request<T>(options: RequestOptions): Promise<T> {
+    const bucket = this.bucketFor(options);
+    const maxRetries = this.opts.maxRetries ?? 3;
+    const sleepFn = this.opts.sleepFn ?? sleep;
+    const url = buildUrl(this.endpoints.spApiBaseUrl, options.path, options.query);
+
+    let attempt = 0;
+    for (;;) {
+      await bucket.acquire();
+      const token = await this.tokenClient.getAccessToken();
+      const res = await this.fetchFn(url, {
+        method: options.method,
+        headers: {
+          "x-amz-access-token": token,
+          "content-type": "application/json",
+          "user-agent": USER_AGENT,
+        },
+        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      });
+
+      if (res.status === 429 && attempt < maxRetries) {
+        attempt += 1;
+        await sleepFn(2 ** attempt * 100);
+        continue;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new SpApiError(
+          `SP-API ${options.operation} failed: ${text}`,
+          res.status,
+          undefined,
+          SpApiError.isRetryable(res.status),
+        );
+      }
+      return (await res.json()) as T;
+    }
+  }
+}
