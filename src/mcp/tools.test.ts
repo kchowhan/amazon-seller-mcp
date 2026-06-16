@@ -10,6 +10,10 @@ import {
   listingPatchTool,
   listingDeleteTool,
   productTypeGetSchemaTool,
+  inventoryGetFbaTool,
+  pricingGetCompetitiveTool,
+  pricingGetItemOffersTool,
+  feesEstimateTool,
 } from "./tools";
 import type { SpApiClient } from "../client";
 import type { SpApiConfig } from "../config";
@@ -263,6 +267,142 @@ describe("productTypeGetSchemaTool", () => {
     const client = { request } as unknown as SpApiClient;
 
     const result = await productTypeGetSchemaTool(client, config, { productType: "UNKNOWN" });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("inventoryGetFbaTool", () => {
+  it("returns inventory summaries as text", async () => {
+    const request = vi.fn().mockResolvedValue({
+      payload: { inventorySummaries: [{ sellerSku: "SKU-1", totalQuantity: 10 }] },
+    });
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await inventoryGetFbaTool(client, config, {});
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]!.text).toContain("SKU-1");
+  });
+
+  it("uses config marketplaceId when caller omits marketplaceId", async () => {
+    const request = vi.fn().mockResolvedValue({ payload: { inventorySummaries: [] } });
+    const client = { request } as unknown as SpApiClient;
+
+    await inventoryGetFbaTool(client, config, {});
+    const opts = request.mock.calls[0]![0];
+    expect(opts.query.granularityId).toBe("ATVPDKIKX0DER");
+    expect(opts.query.marketplaceIds).toEqual(["ATVPDKIKX0DER"]);
+    expect(opts.query.granularityType).toBe("Marketplace");
+    expect(opts.query.details).toBe("true");
+  });
+
+  it("returns isError when request rejects", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("503"));
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await inventoryGetFbaTool(client, config, {});
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("pricingGetCompetitiveTool", () => {
+  it("returns competitive pricing as text", async () => {
+    const request = vi.fn().mockResolvedValue({
+      payload: [{ ASIN: "B001", status: "Success", Product: {} }],
+    });
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetCompetitiveTool(client, config, { asins: ["B001"] });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]!.text).toContain("B001");
+  });
+
+  it("passes PascalCase params and uses config marketplaceId when omitted", async () => {
+    const request = vi.fn().mockResolvedValue({ payload: [] });
+    const client = { request } as unknown as SpApiClient;
+
+    await pricingGetCompetitiveTool(client, config, { asins: ["B001"] });
+    const opts = request.mock.calls[0]![0];
+    expect(opts.query.MarketplaceId).toBe("ATVPDKIKX0DER");
+    expect(opts.query.Asins).toEqual(["B001"]);
+    expect(opts.query.ItemType).toBe("Asin");
+  });
+
+  it("returns isError when request rejects", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("403"));
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetCompetitiveTool(client, config, { asins: ["B001"] });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("pricingGetItemOffersTool", () => {
+  it("returns item offers as text", async () => {
+    const request = vi.fn().mockResolvedValue({
+      payload: { ASIN: "B001", status: "Success", Offers: [] },
+    });
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetItemOffersTool(client, config, { asin: "B001" });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]!.text).toContain("B001");
+  });
+
+  it("uses default ItemCondition=New and config marketplaceId when omitted", async () => {
+    const request = vi.fn().mockResolvedValue({ payload: {} });
+    const client = { request } as unknown as SpApiClient;
+
+    await pricingGetItemOffersTool(client, config, { asin: "B001" });
+    const opts = request.mock.calls[0]![0];
+    expect(opts.query.MarketplaceId).toBe("ATVPDKIKX0DER");
+    expect(opts.query.ItemCondition).toBe("New");
+    expect(opts.path).toContain("/B001/");
+  });
+
+  it("returns isError when request rejects", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("404"));
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetItemOffersTool(client, config, { asin: "B001" });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe("feesEstimateTool", () => {
+  it("returns fees estimate as text", async () => {
+    const request = vi.fn().mockResolvedValue({
+      payload: {
+        FeesEstimateResult: {
+          FeesEstimate: { TotalFeesEstimate: { CurrencyCode: "USD", Amount: 3.5 } },
+        },
+      },
+    });
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await feesEstimateTool(client, config, { asin: "B001", price: 29.99 });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]!.text).toContain("USD");
+  });
+
+  it("passes correct POST body with PascalCase fields and defaults", async () => {
+    const request = vi.fn().mockResolvedValue({ payload: {} });
+    const client = { request } as unknown as SpApiClient;
+
+    await feesEstimateTool(client, config, { asin: "B001", price: 29.99 });
+    const opts = request.mock.calls[0]![0];
+    expect(opts.method).toBe("POST");
+    expect(opts.path).toContain("/B001/feesEstimate");
+    expect(opts.body.FeesEstimateRequest.MarketplaceId).toBe("ATVPDKIKX0DER");
+    expect(opts.body.FeesEstimateRequest.IsAmazonFulfilled).toBe(true);
+    expect(opts.body.FeesEstimateRequest.PriceToEstimateFees.ListingPrice.CurrencyCode).toBe("USD");
+    expect(opts.body.FeesEstimateRequest.PriceToEstimateFees.ListingPrice.Amount).toBe(29.99);
+  });
+
+  it("returns isError when request rejects", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("400"));
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await feesEstimateTool(client, config, { asin: "B001", price: 9.99 });
     expect(result.isError).toBe(true);
   });
 });

@@ -12,6 +12,9 @@ import {
   type PatchListingsItemBody,
 } from "../operations/listings";
 import { getDefinitionsProductType } from "../operations/productTypes";
+import { getInventorySummaries } from "../operations/fbaInventory";
+import { getCompetitivePricing, getItemOffers } from "../operations/pricing";
+import { getMyFeesEstimateForASIN } from "../operations/fees";
 import { SpApiError } from "../errors";
 
 export interface ToolResult {
@@ -243,6 +246,111 @@ export async function productTypeGetSchemaTool(
       marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
       requirements: args.requirements,
       locale: args.locale,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function inventoryGetFbaTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    marketplaceId?: string;
+    details?: boolean;
+    startDateTime?: string;
+    sellerSkus?: string[];
+    nextToken?: string;
+  },
+): Promise<ToolResult> {
+  const marketplaceId = args.marketplaceId ?? config.marketplaceIds[0]!;
+  try {
+    const result = await getInventorySummaries(client, {
+      granularityType: "Marketplace",
+      granularityId: marketplaceId,
+      marketplaceIds: [marketplaceId],
+      details: args.details ?? true,
+      startDateTime: args.startDateTime,
+      sellerSkus: args.sellerSkus,
+      nextToken: args.nextToken,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function pricingGetCompetitiveTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    asins?: string[];
+    skus?: string[];
+    marketplaceId?: string;
+  },
+): Promise<ToolResult> {
+  try {
+    const result = await getCompetitivePricing(client, {
+      MarketplaceId: args.marketplaceId ?? config.marketplaceIds[0]!,
+      Asins: args.asins,
+      Skus: args.skus,
+      ItemType: args.skus && args.skus.length > 0 ? "Sku" : "Asin",
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function pricingGetItemOffersTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    asin: string;
+    itemCondition?: string;
+    marketplaceId?: string;
+    customerType?: string;
+  },
+): Promise<ToolResult> {
+  try {
+    const result = await getItemOffers(client, {
+      Asin: args.asin,
+      MarketplaceId: args.marketplaceId ?? config.marketplaceIds[0]!,
+      ItemCondition: args.itemCondition ?? "New",
+      CustomerType: args.customerType,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function feesEstimateTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    asin: string;
+    price: number;
+    currencyCode?: string;
+    isAmazonFulfilled?: boolean;
+    marketplaceId?: string;
+  },
+): Promise<ToolResult> {
+  try {
+    const result = await getMyFeesEstimateForASIN(client, {
+      Asin: args.asin,
+      FeesEstimateRequest: {
+        MarketplaceId: args.marketplaceId ?? config.marketplaceIds[0]!,
+        IsAmazonFulfilled: args.isAmazonFulfilled ?? true,
+        Identifier: args.asin,
+        PriceToEstimateFees: {
+          ListingPrice: {
+            CurrencyCode: args.currencyCode ?? "USD",
+            Amount: args.price,
+          },
+        },
+      },
     });
     return textResult(result);
   } catch (err) {

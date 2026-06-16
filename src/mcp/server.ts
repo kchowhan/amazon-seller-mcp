@@ -13,6 +13,10 @@ import {
   listingPatchTool,
   listingDeleteTool,
   productTypeGetSchemaTool,
+  inventoryGetFbaTool,
+  pricingGetCompetitiveTool,
+  pricingGetItemOffersTool,
+  feesEstimateTool,
 } from "./tools";
 
 export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer {
@@ -202,6 +206,106 @@ export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer
       },
     },
     async (args) => productTypeGetSchemaTool(client, config, args),
+  );
+
+  server.registerTool(
+    "inventory_get_fba",
+    {
+      description:
+        "Get FBA inventory summaries for the seller. Defaults to the first configured marketplace with details=true. Supports pagination via nextToken.",
+      inputSchema: {
+        marketplaceId: z
+          .string()
+          .optional()
+          .describe("Marketplace ID (defaults to first configured marketplace)"),
+        details: z
+          .boolean()
+          .optional()
+          .describe("Whether to include detailed inventory data (default true)"),
+        startDateTime: z
+          .string()
+          .optional()
+          .describe("ISO 8601 datetime to filter items changed after this time"),
+        sellerSkus: z
+          .array(z.string())
+          .optional()
+          .describe("Filter by specific seller SKUs"),
+        nextToken: z.string().optional().describe("Pagination token from a previous response"),
+      },
+    },
+    async (args) => inventoryGetFbaTool(client, config, args),
+  );
+
+  server.registerTool(
+    "pricing_get_competitive",
+    {
+      description:
+        "Get competitive pricing for items by ASIN or SKU. Provide either asins or skus (not both). marketplaceId defaults to the first configured marketplace.",
+      inputSchema: {
+        asins: z
+          .array(z.string())
+          .optional()
+          .describe("List of ASINs to get competitive pricing for (up to 20)"),
+        skus: z
+          .array(z.string())
+          .optional()
+          .describe("List of seller SKUs to get competitive pricing for (up to 20)"),
+        marketplaceId: z
+          .string()
+          .optional()
+          .describe("Marketplace ID (defaults to first configured marketplace)"),
+      },
+    },
+    async (args) => pricingGetCompetitiveTool(client, config, args),
+  );
+
+  server.registerTool(
+    "pricing_get_item_offers",
+    {
+      description:
+        "Get the lowest priced offers for an item by ASIN. marketplaceId defaults to the first configured marketplace.",
+      inputSchema: {
+        asin: z.string().describe("The ASIN to get offers for"),
+        itemCondition: z
+          .string()
+          .optional()
+          .describe("Item condition: New, Used, Collectible, Refurbished, Club (default New)"),
+        marketplaceId: z
+          .string()
+          .optional()
+          .describe("Marketplace ID (defaults to first configured marketplace)"),
+        customerType: z
+          .string()
+          .optional()
+          .describe("Customer type for pricing: Consumer or Business"),
+      },
+    },
+    async (args) => pricingGetItemOffersTool(client, config, args),
+  );
+
+  server.registerTool(
+    "fees_estimate",
+    {
+      description:
+        "Estimate Amazon selling fees for an ASIN at a given price. marketplaceId defaults to the first configured marketplace.",
+      inputSchema: {
+        asin: z.string().describe("The ASIN to estimate fees for"),
+        price: z.number().describe("The listing price to estimate fees on"),
+        currencyCode: z
+          .string()
+          .optional()
+          .describe("ISO 4217 currency code (default USD)"),
+        isAmazonFulfilled: z
+          .boolean()
+          .optional()
+          .describe("Whether the item is fulfilled by Amazon (default true)"),
+        marketplaceId: z
+          .string()
+          .optional()
+          .describe("Marketplace ID (defaults to first configured marketplace)"),
+      },
+    },
+    async (args) => feesEstimateTool(client, config, args),
   );
 
   return server;
