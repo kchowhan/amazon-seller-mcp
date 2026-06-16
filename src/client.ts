@@ -12,6 +12,8 @@ export interface RequestOptions {
   query?: Record<string, string | number | string[] | undefined>;
   body?: unknown;
   rateLimit?: { rate: number; burst: number };
+  /** When set, use a grantless LWA token (client_credentials) instead of getAccessToken(). */
+  grantless?: { scope: string };
 }
 
 export function buildUrl(
@@ -66,7 +68,9 @@ export class SpApiClient {
     let attempt = 0;
     for (;;) {
       await bucket.acquire();
-      const token = await this.tokenClient.getAccessToken();
+      const token = options.grantless
+        ? await this.tokenClient.getGrantlessToken(options.grantless.scope)
+        : await this.tokenClient.getAccessToken();
       const res = await this.fetchFn(url, {
         method: options.method,
         headers: {

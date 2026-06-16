@@ -10,7 +10,10 @@ const endpoints = {
 };
 
 function fakeTokenClient(token = "AT1"): LwaTokenClient {
-  return { getAccessToken: vi.fn().mockResolvedValue(token) } as unknown as LwaTokenClient;
+  return {
+    getAccessToken: vi.fn().mockResolvedValue(token),
+    getGrantlessToken: vi.fn().mockResolvedValue("GT1"),
+  } as unknown as LwaTokenClient;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -92,6 +95,24 @@ describe("SpApiClient.request", () => {
       (e: unknown) => e instanceof SpApiError && e.status === 429,
     );
     expect(fetchFn).toHaveBeenCalledTimes(4); // 1 initial + 3 retries
+  });
+
+  it("uses getGrantlessToken and NOT getAccessToken when grantless option is set", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    const tokenClient = fakeTokenClient();
+    const client = new SpApiClient(endpoints, tokenClient, fetchFn);
+
+    await client.request({
+      operation: "getDestinations",
+      method: "GET",
+      path: "/notifications/v1/destinations",
+      grantless: { scope: "sellingpartnerapi::notifications" },
+    });
+
+    expect(tokenClient.getGrantlessToken).toHaveBeenCalledWith("sellingpartnerapi::notifications");
+    expect(tokenClient.getAccessToken).not.toHaveBeenCalled();
+    const [, init] = fetchFn.mock.calls[0]!;
+    expect((init.headers as Record<string, string>)["x-amz-access-token"]).toBe("GT1");
   });
 
   it("retries on 5xx then succeeds", async () => {
