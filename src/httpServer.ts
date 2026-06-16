@@ -5,6 +5,7 @@
 import express, { type Request, type Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { buildServer } from "./mcp/server.js";
+import { InMemoryEventStore } from "./notifications/eventStore.js";
 import { SellerClientFactory } from "./sellerClient.js";
 import { resolveEndpoints } from "./endpoints.js";
 import { LocalEncryptor } from "./vault/localEncryptor.js";
@@ -40,6 +41,11 @@ export function buildApp(serverCfg: ServerConfig) {
     res.status(403).json({ error: "forbidden", error_description: "Origin not allowed" });
     return false;
   }
+
+  // ── Shared event store (notifications from SQS consumer) ────────────────────
+  // A single InMemoryEventStore is shared across all per-request buildServer calls
+  // so that SQS-delivered notifications persist across requests for the same user.
+  const sharedEventStore = new InMemoryEventStore();
 
   // ── Vault + encryptor ────────────────────────────────────────────────────────
   const encryptor = new LocalEncryptor(serverCfg.vaultKey);
@@ -145,7 +151,7 @@ export function buildApp(serverCfg: ServerConfig) {
       sellerId: connection.sellingPartnerId,
     };
 
-    const mcpServer = buildServer(client, spApiConfig);
+    const mcpServer = buildServer(client, spApiConfig, sharedEventStore, authInfo.sub);
 
     // Stateless transport: sessionIdGenerator is undefined.
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

@@ -18,8 +18,15 @@ import { registerOrdersTools } from "./tools/orders";
 import { registerMerchantFulfillmentTools } from "./tools/merchantFulfillment";
 import { registerMessagingTools } from "./tools/messaging";
 import { registerSolicitationsTools } from "./tools/solicitations";
+import { registerAlertsTools } from "./tools/alerts";
+import { InMemoryEventStore, type EventStore } from "../notifications/eventStore";
 
-export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer {
+export function buildServer(
+  client: SpApiClient,
+  config: SpApiConfig,
+  eventStore: EventStore = new InMemoryEventStore(),
+  mcpUserId = "default",
+): McpServer {
   const server = new McpServer({ name: "amazon-seller-mcp", version: "0.1.0" });
 
   registerAccountTools(server, client, config);
@@ -38,6 +45,7 @@ export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer
   registerMerchantFulfillmentTools(server, client);
   registerMessagingTools(server, client, config);
   registerSolicitationsTools(server, client, config);
+  registerAlertsTools(server, eventStore, mcpUserId);
 
   return server;
 }
