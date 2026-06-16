@@ -74,4 +74,29 @@ describe("SellerClientFactory", () => {
     const b = await factory.forUser("user-b");
     expect(a.client).not.toBe(b.client);
   });
+
+  // M-2: cache invalidation — after invalidate(), forUser() rebuilds the client
+  // and picks up any updated vault connection (e.g. a new refresh token after re-auth).
+  it("invalidate: forUser rebuilds after cache entry is cleared", async () => {
+    await vault.storeConnection(makeConnection("user-invalidate"));
+    const first = await factory.forUser("user-invalidate");
+
+    // Update the vault connection (simulates a re-authorization with a new token).
+    const updated: SellerConnection = {
+      ...makeConnection("user-invalidate"),
+      refreshToken: "Atzr|new-refresh-token-after-reauth",
+    };
+    await vault.storeConnection(updated);
+
+    // Before invalidation, cached entry is stale — still the old client.
+    const cached = await factory.forUser("user-invalidate");
+    expect(cached.client).toBe(first.client);
+    expect(cached.connection.refreshToken).toBe("Atzr|test-refresh-token");
+
+    // After invalidation, a fresh lookup returns a new client reflecting the updated token.
+    factory.invalidate("user-invalidate");
+    const rebuilt = await factory.forUser("user-invalidate");
+    expect(rebuilt.client).not.toBe(first.client);
+    expect(rebuilt.connection.refreshToken).toBe("Atzr|new-refresh-token-after-reauth");
+  });
 });

@@ -17,25 +17,46 @@ import { createAuthMiddleware } from "./http/authMiddleware.js";
 import { protectedResourceMetadata } from "./http/metadata.js";
 import { loadServerConfig, type ServerConfig } from "./serverConfig.js";
 import type { SpApiConfig } from "./config.js";
-import type { SellerConnection } from "./vault/types.js";
+import type { SellerConnection, TokenVault } from "./vault/types.js";
+
+// ─── Injectable deps (for tests) ────────────────────────────────────────────
+
+export interface BuildAppDeps {
+  /** Override the vault used by the app. Useful in tests to pre-seed connections. */
+  vault?: TokenVault;
+}
 
 // ─── Build the Express app ───────────────────────────────────────────────────
 
-export function buildApp(serverCfg: ServerConfig) {
+export function buildApp(serverCfg: ServerConfig, deps?: BuildAppDeps) {
   const app = express();
   app.use(express.json());
 
   // ── Origin header validation (MCP transport security requirement) ───────────
   // Only applied to /mcp routes; the PRM endpoint and OAuth flows are public/redirect.
+  //
+  // Security: we use EXACT origin comparison only. The previous startsWith check
+  // was bypassable (e.g. http://localhost:3000.evil.com would pass against
+  // http://localhost:3000). We now parse both origins with `new URL` and compare
+  // the canonicalized `.origin` property (scheme + host + port) for an exact match.
+  const allowedOrigin = new URL(serverCfg.publicUrl).origin;
+
   function validateOrigin(req: Request, res: Response): boolean {
-    const origin = req.headers["origin"];
-    if (!origin) {
+    const originHeader = req.headers["origin"];
+    if (!originHeader) {
       // Non-browser clients (curl, MCP clients) don't send Origin — allow them.
       return true;
     }
-    // Allow same-origin requests (origin matches our public URL).
-    const allowed = serverCfg.publicUrl;
-    if (origin === allowed || origin.startsWith(allowed)) {
+    // Parse incoming Origin to canonicalize and guard against prefix-matching attacks.
+    let parsedOrigin: string;
+    try {
+      parsedOrigin = new URL(originHeader).origin;
+    } catch {
+      // Malformed Origin header: reject.
+      res.status(403).json({ error: "forbidden", error_description: "Origin not allowed" });
+      return false;
+    }
+    if (parsedOrigin === allowedOrigin) {
       return true;
     }
     res.status(403).json({ error: "forbidden", error_description: "Origin not allowed" });
@@ -48,8 +69,9 @@ export function buildApp(serverCfg: ServerConfig) {
   const sharedEventStore = new InMemoryEventStore();
 
   // ── Vault + encryptor ────────────────────────────────────────────────────────
+  // Use injected vault (tests) or build the default in-memory vault.
   const encryptor = new LocalEncryptor(serverCfg.vaultKey);
-  const vault = new InMemoryTokenVault(encryptor);
+  const vault: TokenVault = deps?.vault ?? new InMemoryTokenVault(encryptor);
 
   // Dev seed: pre-populate vault with a test seller connection for smoke testing.
   if (
@@ -77,6 +99,9 @@ export function buildApp(serverCfg: ServerConfig) {
       ? new DevJwtVerifier(serverCfg.devJwtSecret!)
       : new JwksVerifier(serverCfg.jwksUri!, serverCfg.jwtIssuer!);
 
+  // Note (M-5): scopes on the JWT (e.g. "seller:read", "seller:write") are advisory-only
+  // for now; the auth middleware verifies the token signature and audience but does not
+  // enforce per-tool scope gating. Scope enforcement is deferred to a follow-up.
   const authMiddleware = createAuthMiddleware(verifier, serverCfg.mcpResourceUri);
 
   // ── Seller client factory ────────────────────────────────────────────────────
@@ -95,13 +120,22 @@ export function buildApp(serverCfg: ServerConfig) {
   // ── LWA broker router (Leg 2) ────────────────────────────────────────────────
   const consentStore = new InMemoryConsentStore();
   const stateStore = new InMemoryStateStore();
-  const brokerRouter = createLwaBrokerRouter(vault, consentStore, stateStore, {
-    spapiAppId: serverCfg.spapiAppId,
-    callbackUrl: `${serverCfg.publicUrl}/callback`,
-    lwaTokenUrl: "https://api.amazon.com/auth/o2/token",
-    lwaClientId: serverCfg.lwaClientId,
-    lwaClientSecret: serverCfg.lwaClientSecret,
-  });
+  const brokerRouter = createLwaBrokerRouter(
+    vault,
+    consentStore,
+    stateStore,
+    {
+      spapiAppId: serverCfg.spapiAppId,
+      callbackUrl: `${serverCfg.publicUrl}/callback`,
+      lwaTokenUrl: "https://api.amazon.com/auth/o2/token",
+      lwaClientId: serverCfg.lwaClientId,
+      lwaClientSecret: serverCfg.lwaClientSecret,
+    },
+    globalThis.fetch as Parameters<typeof createLwaBrokerRouter>[4],
+    // M-2: invalidate the cached client when a seller re-authorizes so the new
+    // refresh token takes effect immediately without a server restart.
+    factory.invalidate.bind(factory),
+  );
   // /connect requires auth; /callback is public (authenticated by state token)
   app.get("/connect", authMiddleware, (req, res, next) => brokerRouter(req, res, next));
   app.get("/callback", (req, res, next) => brokerRouter(req, res, next));
@@ -139,6 +173,9 @@ export function buildApp(serverCfg: ServerConfig) {
     }
 
     // Derive a per-seller SpApiConfig from server env + vault connection.
+    // M-4: use the connection's own marketplaceIds when present; fall back to
+    // the server-configured default (DEFAULT_MARKETPLACE_IDS env var) rather
+    // than always hard-coding US ("ATVPDKIKX0DER").
     const spApiConfig: SpApiConfig = {
       lwaClientId: serverCfg.lwaClientId,
       lwaClientSecret: serverCfg.lwaClientSecret,
@@ -146,7 +183,7 @@ export function buildApp(serverCfg: ServerConfig) {
       region: serverCfg.region,
       marketplaceIds: connection.marketplaceIds.length > 0
         ? connection.marketplaceIds
-        : ["ATVPDKIKX0DER"], // fallback for dev seed without marketplace IDs
+        : serverCfg.defaultMarketplaceIds,
       sandbox: serverCfg.sandbox,
       sellerId: connection.sellingPartnerId,
     };
@@ -182,7 +219,10 @@ async function main(): Promise<void> {
   });
 }
 
-main().catch((err: unknown) => {
-  console.error("[amazon-seller-mcp] Fatal startup error:", err);
-  process.exit(1);
-});
+// Only run the server when this file is executed directly (not imported in tests).
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
+  main().catch((err: unknown) => {
+    console.error("[amazon-seller-mcp] Fatal startup error:", err);
+    process.exit(1);
+  });
+}

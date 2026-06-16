@@ -20,6 +20,14 @@ export class SellerClientFactory {
     private readonly appCreds: { clientId: string; clientSecret: string },
   ) {}
 
+  /**
+   * Removes the cached client entry for `mcpUserId` so the next `forUser` call
+   * re-reads the vault (picks up a new refresh token after re-authorization).
+   */
+  invalidate(mcpUserId: string): void {
+    this.cache.delete(mcpUserId);
+  }
+
   async forUser(mcpUserId: string): Promise<{ client: SpApiClient; connection: SellerConnection }> {
     const cached = this.cache.get(mcpUserId);
     if (cached) return cached;

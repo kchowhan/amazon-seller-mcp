@@ -41,6 +41,12 @@ export interface ServerConfig {
   devSeedRefreshToken?: string;
   /** Dev-only: comma-separated marketplace IDs for the seeded connection. */
   devSeedMarketplaceIds?: string[];
+  /**
+   * Fallback marketplace IDs used when a seller connection has an empty
+   * marketplaceIds list. Sourced from DEFAULT_MARKETPLACE_IDS env var
+   * (comma-separated). Defaults to ["ATVPDKIKX0DER"] (US) when unset.
+   */
+  defaultMarketplaceIds: string[];
 }
 
 function required(env: Record<string, string | undefined>, key: string): string {
@@ -63,6 +69,11 @@ export function loadServerConfig(
   const authMode = (env["AUTH_MODE"] ?? "jwks") as "dev" | "jwks";
   const vaultBackend = (env["VAULT_BACKEND"] ?? "dynamo") as "memory" | "dynamo";
 
+  const defaultMarketplaceIds = (env["DEFAULT_MARKETPLACE_IDS"] ?? "ATVPDKIKX0DER")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   const config: ServerConfig = {
     port: parseInt(env["PORT"] ?? "3000", 10),
     publicUrl,
@@ -76,6 +87,7 @@ export function loadServerConfig(
     sandbox: (env["SPAPI_SANDBOX"] ?? "false").toLowerCase() === "true",
     vaultBackend,
     authMode,
+    defaultMarketplaceIds,
   };
 
   if (authMode === "dev") {

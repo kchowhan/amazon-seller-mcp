@@ -5,10 +5,13 @@
 // Table schema:
 //   PK (String, partition key): mcpUserId
 //   Attributes:
-//     encryptedRefreshToken (String) — refreshToken encrypted via injected Encryptor
+//     encryptedRefreshToken (String)          — refreshToken encrypted via injected Encryptor
 //     sellingPartnerId      (String, optional)
-//     marketplaceIds        (List<String>)
-//     grantedRoles          (List<String>, optional)
+//     marketplaceIds        (L — List of String) — stored as DynamoDB List, NOT StringSet (SS).
+//                                                  List is used deliberately: StringSet cannot
+//                                                  be empty, but a freshly-connected seller may
+//                                                  have zero marketplace IDs until populated.
+//     grantedRoles          (L — List of String, optional) — same reason as marketplaceIds.
 //     createdAt             (Number)
 //     updatedAt             (Number)
 //

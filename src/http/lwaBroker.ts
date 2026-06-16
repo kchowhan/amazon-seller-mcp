@@ -74,6 +74,10 @@ export interface LwaBrokerConfig {
  * The auth middleware must run BEFORE this router on the /connect route; the
  * router reads req.authInfo internally. /callback is public (authenticated by
  * the state token Amazon echoes back).
+ *
+ * @param onConnectionChanged - Optional callback invoked after a seller connection
+ *   is stored in the vault. Use this to invalidate per-user client caches so that
+ *   a re-authorized seller's new refresh token takes effect without a restart.
  */
 export function createLwaBrokerRouter(
   vault: TokenVault,
@@ -81,6 +85,7 @@ export function createLwaBrokerRouter(
   stateStore: StateStore,
   config: LwaBrokerConfig,
   fetchFn: FetchLike = globalThis.fetch as FetchLike,
+  onConnectionChanged?: (mcpUserId: string) => void,
 ): Router {
   const router = Router();
   const ttlMs = config.stateTtlMs ?? 10 * 60 * 1000;
@@ -173,8 +178,10 @@ export function createLwaBrokerRouter(
         fetchFn,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "LWA token exchange failed";
-      res.status(502).json({ error: "upstream_error", error_description: msg });
+      // Log the detailed error server-side but never echo raw upstream body to the client.
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("[lwaBroker] LWA token exchange failed:", detail);
+      res.status(502).json({ error: "upstream_error", error_description: "token exchange failed" });
       return;
     }
 
@@ -189,6 +196,8 @@ export function createLwaBrokerRouter(
       updatedAt: now,
     };
     await vault.storeConnection(connection);
+    // Notify caller (e.g. SellerClientFactory) to invalidate any stale cached client.
+    onConnectionChanged?.(pending.sub);
 
     // Record consent
     const consentRecord: ConsentRecord = {

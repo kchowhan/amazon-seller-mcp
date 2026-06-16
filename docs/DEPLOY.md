@@ -26,6 +26,7 @@ All variables must be set before the container starts.
 | `DEV_SEED_USER_ID` | No | Dev only: mcpUserId to pre-populate in the in-memory vault on startup. |
 | `DEV_SEED_REFRESH_TOKEN` | No | Dev only: plaintext refresh token for `DEV_SEED_USER_ID`. |
 | `DEV_SEED_MARKETPLACE_IDS` | No | Dev only: comma-separated marketplace IDs for the seeded connection. |
+| `DEFAULT_MARKETPLACE_IDS` | No (default: `ATVPDKIKX0DER`) | Comma-separated marketplace IDs used when a seller connection has an empty `marketplaceIds` list. Defaults to the US marketplace. Set to match your primary region (e.g. `A1F83G8C2ARO7P` for UK). |
 | `SPAPI_SQS_QUEUE_URL` | No | SQS queue URL for the notification consumer (see Notifications section). |
 
 ---
@@ -38,8 +39,14 @@ The vault stores encrypted seller refresh tokens.
 
 - **Table name**: e.g. `amazon-seller-mcp-vault` (configure in your vault adapter)
 - **Partition key**: `mcpUserId` (String)
-- **Attributes**: `mcpUserId`, `refreshToken` (AES-KMS encrypted base64), `sellingPartnerId`,
-  `marketplaceIds` (StringSet), `createdAt` (Number), `updatedAt` (Number)
+- **Attributes**: `mcpUserId`, `encryptedRefreshToken` (AES-KMS encrypted base64 String),
+  `sellingPartnerId` (String, optional), `marketplaceIds` (L — DynamoDB List of String,
+  **not** StringSet), `grantedRoles` (L — List of String, optional), `createdAt` (Number),
+  `updatedAt` (Number).
+  > **Note**: `marketplaceIds` and `grantedRoles` are stored as DynamoDB **List (`L`)**, not
+  > StringSet (`SS`). List is used deliberately because StringSet cannot store an empty set,
+  > but a freshly-connected seller may have zero marketplace IDs until populated via the
+  > account API.
 - **Billing**: On-demand recommended (traffic is bursty per OAuth connect)
 - **Encryption**: Enable SSE with a customer-managed KMS key (see below)
 - **TTL**: Optional; enable on `updatedAt` + offset if you want inactive token auto-expiry
