@@ -8,6 +8,10 @@ import {
   sellersGetMarketplacesTool,
   catalogSearchTool,
   catalogGetItemTool,
+  listingGetTool,
+  listingPutTool,
+  listingPatchTool,
+  listingDeleteTool,
 } from "./tools";
 
 export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer {
@@ -84,6 +88,94 @@ export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer
       },
     },
     async (args) => catalogGetItemTool(client, config, args),
+  );
+
+  const listingCommonInputs = {
+    sku: z.string().describe("Seller SKU for the listing"),
+    sellerId: z
+      .string()
+      .optional()
+      .describe("Seller ID (defaults to SPAPI_SELLER_ID; required if not configured)"),
+    marketplaceIds: z
+      .array(z.string())
+      .optional()
+      .describe("Marketplace IDs (defaults to configured marketplaces)"),
+    issueLocale: z.string().optional().describe("Locale for issue messages (e.g. en_US)"),
+  };
+
+  server.registerTool(
+    "listing_get",
+    {
+      description:
+        "Get a listings item for a seller by SKU. sellerId defaults to SPAPI_SELLER_ID.",
+      inputSchema: {
+        ...listingCommonInputs,
+        includedData: z
+          .array(z.string())
+          .optional()
+          .describe("Data sets to include: summaries, attributes, issues, offers, etc."),
+      },
+    },
+    async (args) => listingGetTool(client, config, args),
+  );
+
+  server.registerTool(
+    "listing_put",
+    {
+      description:
+        "Create or fully replace a listings item for a seller by SKU. sellerId defaults to SPAPI_SELLER_ID.",
+      inputSchema: {
+        ...listingCommonInputs,
+        body: z
+          .object({
+            productType: z.string().describe("Amazon product type (e.g. SHIRT)"),
+            requirements: z.string().optional().describe("Requirements type (e.g. LISTING)"),
+            attributes: z.record(z.unknown()).describe("Product attributes per product type schema"),
+          })
+          .describe("Listing item body"),
+        includedData: z.array(z.string()).optional().describe("Data sets to include in response"),
+        mode: z.string().optional().describe("Validation mode (e.g. VALIDATION_PREVIEW)"),
+      },
+    },
+    async (args) => listingPutTool(client, config, args),
+  );
+
+  server.registerTool(
+    "listing_patch",
+    {
+      description:
+        "Partially update a listings item for a seller by SKU. sellerId defaults to SPAPI_SELLER_ID.",
+      inputSchema: {
+        ...listingCommonInputs,
+        body: z
+          .object({
+            productType: z.string().describe("Amazon product type (e.g. SHIRT)"),
+            patches: z
+              .array(
+                z.object({
+                  op: z.string().describe("JSON Patch operation: add, replace, or delete"),
+                  path: z.string().describe("JSON Pointer path to the attribute"),
+                  value: z.unknown().optional().describe("Value for add/replace operations"),
+                }),
+              )
+              .describe("Array of JSON Patch operations"),
+          })
+          .describe("Patch body"),
+        includedData: z.array(z.string()).optional().describe("Data sets to include in response"),
+        mode: z.string().optional().describe("Validation mode (e.g. VALIDATION_PREVIEW)"),
+      },
+    },
+    async (args) => listingPatchTool(client, config, args),
+  );
+
+  server.registerTool(
+    "listing_delete",
+    {
+      description:
+        "Delete a listings item for a seller by SKU. sellerId defaults to SPAPI_SELLER_ID.",
+      inputSchema: listingCommonInputs,
+    },
+    async (args) => listingDeleteTool(client, config, args),
   );
 
   return server;

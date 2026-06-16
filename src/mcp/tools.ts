@@ -3,6 +3,14 @@ import type { SpApiClient } from "../client";
 import type { SpApiConfig } from "../config";
 import { getMarketplaceParticipations } from "../operations/sellers";
 import { searchCatalogItems, getCatalogItem } from "../operations/catalog";
+import {
+  getListingsItem,
+  putListingsItem,
+  patchListingsItem,
+  deleteListingsItem,
+  type PutListingsItemBody,
+  type PatchListingsItemBody,
+} from "../operations/listings";
 import { SpApiError } from "../errors";
 
 export interface ToolResult {
@@ -85,6 +93,132 @@ export async function catalogGetItemTool(
     const result = await getCatalogItem(client, {
       ...args,
       marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+const SELLER_ID_ERROR =
+  "sellerId is required: set SPAPI_SELLER_ID or pass sellerId as a tool argument";
+
+function resolveSellerOrError(
+  argSellerId: string | undefined,
+  configSellerId: string | undefined,
+): { ok: true; sellerId: string } | { ok: false; result: ToolResult } {
+  const sellerId = argSellerId ?? configSellerId;
+  if (!sellerId) return { ok: false, result: errorResult(new Error(SELLER_ID_ERROR)) };
+  return { ok: true, sellerId };
+}
+
+export async function listingGetTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    sku: string;
+    sellerId?: string;
+    marketplaceIds?: string[];
+    includedData?: string[];
+    issueLocale?: string;
+  },
+): Promise<ToolResult> {
+  const resolved = resolveSellerOrError(args.sellerId, config.sellerId);
+  if (!resolved.ok) return resolved.result;
+  try {
+    const result = await getListingsItem(client, {
+      sellerId: resolved.sellerId,
+      sku: args.sku,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+      includedData: args.includedData,
+      issueLocale: args.issueLocale,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function listingPutTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    sku: string;
+    body: PutListingsItemBody;
+    sellerId?: string;
+    marketplaceIds?: string[];
+    includedData?: string[];
+    mode?: string;
+    issueLocale?: string;
+  },
+): Promise<ToolResult> {
+  const resolved = resolveSellerOrError(args.sellerId, config.sellerId);
+  if (!resolved.ok) return resolved.result;
+  try {
+    const result = await putListingsItem(client, {
+      sellerId: resolved.sellerId,
+      sku: args.sku,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+      body: args.body,
+      includedData: args.includedData,
+      mode: args.mode,
+      issueLocale: args.issueLocale,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function listingPatchTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    sku: string;
+    body: PatchListingsItemBody;
+    sellerId?: string;
+    marketplaceIds?: string[];
+    includedData?: string[];
+    mode?: string;
+    issueLocale?: string;
+  },
+): Promise<ToolResult> {
+  const resolved = resolveSellerOrError(args.sellerId, config.sellerId);
+  if (!resolved.ok) return resolved.result;
+  try {
+    const result = await patchListingsItem(client, {
+      sellerId: resolved.sellerId,
+      sku: args.sku,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+      body: args.body,
+      includedData: args.includedData,
+      mode: args.mode,
+      issueLocale: args.issueLocale,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function listingDeleteTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    sku: string;
+    sellerId?: string;
+    marketplaceIds?: string[];
+    issueLocale?: string;
+  },
+): Promise<ToolResult> {
+  const resolved = resolveSellerOrError(args.sellerId, config.sellerId);
+  if (!resolved.ok) return resolved.result;
+  try {
+    const result = await deleteListingsItem(client, {
+      sellerId: resolved.sellerId,
+      sku: args.sku,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+      issueLocale: args.issueLocale,
     });
     return textResult(result);
   } catch (err) {
