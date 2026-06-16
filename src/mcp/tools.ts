@@ -2,6 +2,7 @@
 import type { SpApiClient } from "../client";
 import type { SpApiConfig } from "../config";
 import { getMarketplaceParticipations } from "../operations/sellers";
+import { searchCatalogItems, getCatalogItem } from "../operations/catalog";
 import { SpApiError } from "../errors";
 
 export interface ToolResult {
@@ -39,6 +40,53 @@ export async function sellersGetMarketplacesTool(client: SpApiClient): Promise<T
   try {
     const participations = await getMarketplaceParticipations(client);
     return textResult(participations);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function catalogSearchTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    keywords?: string[];
+    identifiers?: string[];
+    identifiersType?: string;
+    marketplaceIds?: string[];
+    includedData?: string[];
+    pageSize?: number;
+    pageToken?: string;
+    brandNames?: string[];
+    classificationIds?: string[];
+  },
+): Promise<ToolResult> {
+  try {
+    const result = await searchCatalogItems(client, {
+      ...args,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+    });
+    return textResult(result);
+  } catch (err) {
+    return errorResult(err);
+  }
+}
+
+export async function catalogGetItemTool(
+  client: SpApiClient,
+  config: SpApiConfig,
+  args: {
+    asin: string;
+    marketplaceIds?: string[];
+    includedData?: string[];
+    locale?: string;
+  },
+): Promise<ToolResult> {
+  try {
+    const result = await getCatalogItem(client, {
+      ...args,
+      marketplaceIds: args.marketplaceIds ?? config.marketplaceIds,
+    });
+    return textResult(result);
   } catch (err) {
     return errorResult(err);
   }
