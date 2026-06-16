@@ -14,6 +14,12 @@ export interface RequestOptions {
   rateLimit?: { rate: number; burst: number };
   /** When set, use a grantless LWA token (client_credentials) instead of getAccessToken(). */
   grantless?: { scope: string };
+  /**
+   * When set, mint a Restricted Data Token (RDT) via the Tokens API and send it as
+   * x-amz-access-token. Required for restricted operations that return PII.
+   * The path in each entry must exactly match the request path (with path-param substitution applied).
+   */
+  restrictedResources?: { method: string; path: string; dataElements?: string[] }[];
 }
 
 export function buildUrl(
@@ -65,12 +71,20 @@ export class SpApiClient {
     const sleepFn = this.opts.sleepFn ?? sleep;
     const url = buildUrl(this.endpoints.spApiBaseUrl, options.path, options.query);
 
+    // Resolve the access token once before the retry loop.
+    // Priority: restrictedResources (RDT) -> grantless -> normal.
+    let token: string;
+    if (options.restrictedResources) {
+      token = await this.mintRdt(options.restrictedResources);
+    } else if (options.grantless) {
+      token = await this.tokenClient.getGrantlessToken(options.grantless.scope);
+    } else {
+      token = await this.tokenClient.getAccessToken();
+    }
+
     let attempt = 0;
     for (;;) {
       await bucket.acquire();
-      const token = options.grantless
-        ? await this.tokenClient.getGrantlessToken(options.grantless.scope)
-        : await this.tokenClient.getAccessToken();
       const res = await this.fetchFn(url, {
         method: options.method,
         headers: {
@@ -99,5 +113,17 @@ export class SpApiClient {
       }
       return (await res.json()) as T;
     }
+  }
+
+  private async mintRdt(
+    restrictedResources: NonNullable<RequestOptions["restrictedResources"]>,
+  ): Promise<string> {
+    const res = await this.request<{ restrictedDataToken: string; expiresIn: number }>({
+      operation: "createRestrictedDataToken",
+      method: "POST",
+      path: "/tokens/2021-03-01/restrictedDataToken",
+      body: { restrictedResources },
+    });
+    return res.restrictedDataToken;
   }
 }

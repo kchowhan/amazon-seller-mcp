@@ -133,4 +133,79 @@ describe("SpApiClient.request", () => {
     expect(result.payload).toBe(99);
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
+
+  it("mints an RDT via Tokens API then sends it as x-amz-access-token on the restricted call", async () => {
+    const tokenApiPath = "/tokens/2021-03-01/restrictedDataToken";
+    const restrictedPath = "/orders/v0/orders";
+
+    // URL-branching fetch mock: first call is the Tokens POST, second is the actual restricted GET
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      if (url.includes(tokenApiPath)) {
+        return Promise.resolve(
+          jsonResponse({ restrictedDataToken: "RDT1", expiresIn: 3600 }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ orders: [] }));
+    });
+
+    const tokenClient = fakeTokenClient("NORMAL_TOKEN");
+    const client = new SpApiClient(endpoints, tokenClient, fetchFn);
+
+    const result = await client.request<{ orders: unknown[] }>({
+      operation: "getOrders",
+      method: "GET",
+      path: restrictedPath,
+      restrictedResources: [
+        { method: "GET", path: restrictedPath, dataElements: ["buyerInfo"] },
+      ],
+    });
+
+    // Should have made exactly 2 fetch calls: Tokens POST then the restricted GET
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+
+    // First call: POST to the Tokens API with the correct body
+    const [tokUrl, tokInit] = fetchFn.mock.calls[0]!;
+    expect(tokUrl).toContain(tokenApiPath);
+    expect(tokInit.method).toBe("POST");
+    const tokBody = JSON.parse(tokInit.body as string) as {
+      restrictedResources: { method: string; path: string; dataElements: string[] }[];
+    };
+    expect(tokBody.restrictedResources).toEqual([
+      { method: "GET", path: restrictedPath, dataElements: ["buyerInfo"] },
+    ]);
+    // The Tokens POST itself uses the normal access token
+    expect((tokInit.headers as Record<string, string>)["x-amz-access-token"]).toBe("NORMAL_TOKEN");
+
+    // Second call: actual restricted GET uses the RDT
+    const [ordUrl, ordInit] = fetchFn.mock.calls[1]!;
+    expect(ordUrl).toContain(restrictedPath);
+    expect((ordInit.headers as Record<string, string>)["x-amz-access-token"]).toBe("RDT1");
+
+    expect(result.orders).toEqual([]);
+  });
+
+  it("does NOT call getAccessToken when restrictedResources is set", async () => {
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/tokens/2021-03-01/restrictedDataToken")) {
+        return Promise.resolve(jsonResponse({ restrictedDataToken: "RDT2", expiresIn: 3600 }));
+      }
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+
+    const tokenClient = fakeTokenClient();
+    const client = new SpApiClient(endpoints, tokenClient, fetchFn);
+
+    await client.request({
+      operation: "getOrder",
+      method: "GET",
+      path: "/orders/v0/orders/111-2222222-3333333",
+      restrictedResources: [
+        { method: "GET", path: "/orders/v0/orders/111-2222222-3333333", dataElements: ["buyerInfo", "shippingAddress"] },
+      ],
+    });
+
+    // getAccessToken is called once (by mintRdt's inner request), NOT by the outer restricted call
+    expect(tokenClient.getAccessToken).toHaveBeenCalledTimes(1);
+    expect(tokenClient.getGrantlessToken).not.toHaveBeenCalled();
+  });
 });
