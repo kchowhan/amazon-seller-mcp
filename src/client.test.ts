@@ -184,7 +184,7 @@ describe("SpApiClient.request", () => {
     expect(result.orders).toEqual([]);
   });
 
-  it("does NOT call getAccessToken when restrictedResources is set", async () => {
+  it("getAccessToken is called exactly once, by mintRdt's inner Tokens request, not by the outer restricted call", async () => {
     const fetchFn = vi.fn().mockImplementation((url: string) => {
       if (url.includes("/tokens/2021-03-01/restrictedDataToken")) {
         return Promise.resolve(jsonResponse({ restrictedDataToken: "RDT2", expiresIn: 3600 }));
@@ -207,5 +207,104 @@ describe("SpApiClient.request", () => {
     // getAccessToken is called once (by mintRdt's inner request), NOT by the outer restricted call
     expect(tokenClient.getAccessToken).toHaveBeenCalledTimes(1);
     expect(tokenClient.getGrantlessToken).not.toHaveBeenCalled();
+  });
+
+  it("RDT cache: same restrictedResources hits Tokens API only once; both calls use the same RDT", async () => {
+    const tokenApiPath = "/tokens/2021-03-01/restrictedDataToken";
+    const restrictedPath = "/orders/v0/orders";
+    let tokenCallCount = 0;
+
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      if (url.includes(tokenApiPath)) {
+        tokenCallCount += 1;
+        return Promise.resolve(jsonResponse({ restrictedDataToken: "RDT-CACHED", expiresIn: 3600 }));
+      }
+      return Promise.resolve(jsonResponse({ orders: [] }));
+    });
+
+    const fakeClock = { now: vi.fn().mockReturnValue(1_000_000) };
+    const client = new SpApiClient(endpoints, fakeTokenClient("AT"), fetchFn, { clock: fakeClock });
+
+    const resources = [{ method: "GET", path: restrictedPath, dataElements: ["buyerInfo"] }];
+
+    // First restricted request: should mint RDT (1 Tokens API call)
+    await client.request({ operation: "getOrders", method: "GET", path: restrictedPath, restrictedResources: resources });
+    // Second restricted request with the SAME scope: should reuse cache (no new Tokens call)
+    await client.request({ operation: "getOrders", method: "GET", path: restrictedPath, restrictedResources: resources });
+
+    expect(tokenCallCount).toBe(1);
+
+    // Both real calls (fetch calls 2 and 3) used the cached RDT
+    const realCalls = fetchFn.mock.calls.filter((args) => (args[0] as string).includes(restrictedPath));
+    for (const [, init] of realCalls) {
+      expect((init.headers as Record<string, string>)["x-amz-access-token"]).toBe("RDT-CACHED");
+    }
+  });
+
+  it("RDT cache: after expiry window, a third request re-mints (Tokens API called a second time)", async () => {
+    const tokenApiPath = "/tokens/2021-03-01/restrictedDataToken";
+    const restrictedPath = "/orders/v0/orders";
+    let tokenCallCount = 0;
+
+    // Clock starts at t=0; RDT expiresIn=3600s -> expiresAt=3_600_000ms; stale after t=3_540_000ms
+    let currentTime = 0;
+    const fakeClock = { now: vi.fn().mockImplementation(() => currentTime) };
+
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      if (url.includes(tokenApiPath)) {
+        tokenCallCount += 1;
+        return Promise.resolve(jsonResponse({ restrictedDataToken: `RDT-${tokenCallCount}`, expiresIn: 3600 }));
+      }
+      return Promise.resolve(jsonResponse({ orders: [] }));
+    });
+
+    const client = new SpApiClient(endpoints, fakeTokenClient("AT"), fetchFn, { clock: fakeClock });
+    const resources = [{ method: "GET", path: restrictedPath, dataElements: ["buyerInfo"] }];
+
+    // First request at t=0: mints RDT-1
+    await client.request({ operation: "getOrders", method: "GET", path: restrictedPath, restrictedResources: resources });
+    expect(tokenCallCount).toBe(1);
+
+    // Second request within cache window: reuses RDT-1
+    currentTime = 3_539_999; // just before the 60s safety margin
+    await client.request({ operation: "getOrders", method: "GET", path: restrictedPath, restrictedResources: resources });
+    expect(tokenCallCount).toBe(1);
+
+    // Advance clock past expiresAt - 60_000 (3_600_000 - 60_000 = 3_540_000)
+    currentTime = 3_540_001;
+    // Third request: cache is stale, should re-mint -> RDT-2
+    await client.request({ operation: "getOrders", method: "GET", path: restrictedPath, restrictedResources: resources });
+    expect(tokenCallCount).toBe(2);
+  });
+
+  it("RDT cache: different restrictedResources scopes mint separate RDTs", async () => {
+    const tokenApiPath = "/tokens/2021-03-01/restrictedDataToken";
+    let tokenCallCount = 0;
+
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      if (url.includes(tokenApiPath)) {
+        tokenCallCount += 1;
+        return Promise.resolve(jsonResponse({ restrictedDataToken: `RDT-SCOPE-${tokenCallCount}`, expiresIn: 3600 }));
+      }
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+
+    const fakeClock = { now: vi.fn().mockReturnValue(1_000_000) };
+    const client = new SpApiClient(endpoints, fakeTokenClient("AT"), fetchFn, { clock: fakeClock });
+
+    const resourcesA = [{ method: "GET", path: "/orders/v0/orders", dataElements: ["buyerInfo"] }];
+    const resourcesB = [{ method: "GET", path: "/orders/v0/orders/123", dataElements: ["buyerInfo", "shippingAddress"] }];
+
+    await client.request({ operation: "getOrders", method: "GET", path: "/orders/v0/orders", restrictedResources: resourcesA });
+    await client.request({ operation: "getOrder", method: "GET", path: "/orders/v0/orders/123", restrictedResources: resourcesB });
+
+    // Different scopes -> two separate Tokens API calls
+    expect(tokenCallCount).toBe(2);
+
+    // Each real call used its respective RDT
+    const ordersCall = fetchFn.mock.calls.find((args) => (args[0] as string).endsWith("/orders/v0/orders"))!;
+    const orderCall = fetchFn.mock.calls.find((args) => (args[0] as string).endsWith("/orders/v0/orders/123"))!;
+    expect((ordersCall[1].headers as Record<string, string>)["x-amz-access-token"]).toBe("RDT-SCOPE-1");
+    expect((orderCall[1].headers as Record<string, string>)["x-amz-access-token"]).toBe("RDT-SCOPE-2");
   });
 });

@@ -4,6 +4,16 @@
 
 **Goal:** RDT minting in the transport + Tokens API, then Orders (incl. buyer PII), confirm shipment, Merchant Fulfillment, Messaging, and Solicitations.
 
+### Deviation from initial plan (model-grounded)
+
+After reviewing Amazon's official OpenAPI models and the SP-API Tokens use-case guide, the following operations are NOT restricted and are intentionally implemented WITHOUT `restrictedResources`:
+
+- **Task 4 (`getEligibleShipmentServices`):** The Merchant Fulfillment POST `/mfn/v0/eligibleShippingServices` is a rate-quoting call. It is not listed as a restricted operation in the Tokens API use-case guide and does not appear in the official OpenAPI model's `x-amzn-api-sandbox` or security definitions as requiring an RDT.
+- **Task 5 (Messaging):** Messaging v1 endpoints (`getMessagingActionsForOrder`, `createConfirmDeliveryDetails`) are not restricted operations per the official `messaging-api-model`. They use a standard seller access token, not an RDT.
+- **Task 6 (Solicitations):** Solicitations v1 endpoints (`getSolicitationActionsForOrder`, `createProductReviewAndSellerFeedbackSolicitation`) are not restricted operations per the official `solicitations-api-model`. They use a standard seller access token, not an RDT.
+
+Only the following are genuinely RDT-scoped in this wave: Orders PII reads (`getOrders`, `getOrder`, `getOrderItems`) and MFN `createShipment` (buyer address PII). The task descriptions below reflect this corrected understanding.
+
 **Model dirs (amzn/selling-partner-api-models):** `tokens-api-model` (tokens 2021-03-01), `orders-api-model` (orders v0), `merchant-fulfillment-api-model` (v0), `messaging-api-model` (v1), `solicitations-api-model` (v1).
 
 ---
@@ -60,12 +70,11 @@ IMPORTANT for RDT scoping: the `path` in `restrictedResources` must match the re
 
 - [ ] TDD operations (assert path, query, AND restrictedResources/dataElements) + tools (success + error). Commit.
 
-## Task 4: Merchant Fulfillment (merchantFulfillment/v0) with RDT
+## Task 4: Merchant Fulfillment (merchantFulfillment/v0)
 
-`src/operations/merchantFulfillment.ts` (ground in `merchant-fulfillment-api-model`; these handle buyer address PII -> restricted):
-- `getEligibleShipmentServices`: POST `/mfn/v0/eligibleShippingServices`, body `{ ShipmentRequestDetails }`.
-- `createShipment`: POST `/mfn/v0/shipments`, body `{ ShipmentRequestDetails, ShippingServiceId, ... }`.
-Set `restrictedResources` per the model for these (confirm exact path + dataElements; typically `["shippingAddress"]` or `["buyerInfo"]`).
+`src/operations/merchantFulfillment.ts` (ground in `merchant-fulfillment-api-model`):
+- `getEligibleShipmentServices`: POST `/mfn/v0/eligibleShippingServices`, body `{ ShipmentRequestDetails }`. NOT a restricted operation per the official model; no `restrictedResources`.
+- `createShipment`: POST `/mfn/v0/shipments`, body `{ ShipmentRequestDetails, ShippingServiceId, ... }`. RDT-scoped (buyer address PII); set `restrictedResources` with `dataElements: ["shippingAddress"]`.
 
 Tools (`src/mcp/tools/merchantFulfillment.ts`):
 - `fulfillment_get_rates` (inputs: shipmentRequestDetails object) -> getEligibleShipmentServices
@@ -73,11 +82,11 @@ Tools (`src/mcp/tools/merchantFulfillment.ts`):
 
 - [ ] TDD operations + tools. Commit.
 
-## Task 5: Messaging (messaging/v1) with RDT
+## Task 5: Messaging (messaging/v1)
 
-`src/operations/messaging.ts` (ground in `messaging-api-model`; restricted):
-- `getMessagingActionsForOrder`: GET `/messaging/v1/orders/{amazonOrderId}`, query `marketplaceIds`. RDT-scoped.
-- One representative send action confirmed in the model, e.g. `createConfirmDeliveryDetails`: POST `/messaging/v1/orders/{amazonOrderId}/messages/confirmDeliveryDetails`, query `marketplaceIds`, body `{ text }`. RDT-scoped.
+`src/operations/messaging.ts` (ground in `messaging-api-model`; NOT restricted per official model — uses standard seller access token, no RDT):
+- `getMessagingActionsForOrder`: GET `/messaging/v1/orders/{amazonOrderId}`, query `marketplaceIds`. No `restrictedResources`.
+- One representative send action confirmed in the model, e.g. `createConfirmDeliveryDetails`: POST `/messaging/v1/orders/{amazonOrderId}/messages/confirmDeliveryDetails`, query `marketplaceIds`, body `{ text }`. No `restrictedResources`.
 
 Tools (`src/mcp/tools/messaging.ts`):
 - `messaging_get_actions` (inputs: amazonOrderId, marketplaceIds default config)
@@ -86,11 +95,11 @@ Note in the tool descriptions that Amazon constrains buyer-seller messaging to s
 
 - [ ] TDD operations + tools. Commit.
 
-## Task 6: Solicitations (solicitations/v1) with RDT
+## Task 6: Solicitations (solicitations/v1)
 
-`src/operations/solicitations.ts` (ground in `solicitations-api-model`; restricted):
-- `getSolicitationActionsForOrder`: GET `/solicitations/v1/orders/{amazonOrderId}`, query `marketplaceIds`.
-- `createProductReviewAndSellerFeedbackSolicitation`: POST `/solicitations/v1/orders/{amazonOrderId}/solicitations/productReviewAndSellerFeedback`, query `marketplaceIds`.
+`src/operations/solicitations.ts` (ground in `solicitations-api-model`; NOT restricted per official model — uses standard seller access token, no RDT):
+- `getSolicitationActionsForOrder`: GET `/solicitations/v1/orders/{amazonOrderId}`, query `marketplaceIds`. No `restrictedResources`.
+- `createProductReviewAndSellerFeedbackSolicitation`: POST `/solicitations/v1/orders/{amazonOrderId}/solicitations/productReviewAndSellerFeedback`, query `marketplaceIds`. No `restrictedResources`.
 
 Tools (`src/mcp/tools/solicitations.ts`):
 - `solicitations_get_actions` (inputs: amazonOrderId, marketplaceIds default config)

@@ -2,6 +2,7 @@
 import type { Endpoints } from "./endpoints";
 import type { LwaTokenClient, FetchLike } from "./auth/lwaTokenClient";
 import type { Clock } from "./clock";
+import { systemClock } from "./clock";
 import { SpApiError } from "./errors";
 import { TokenBucket, sleep, type SleepLike } from "./rateLimiter";
 
@@ -43,10 +44,12 @@ export function buildUrl(
 }
 
 const DEFAULT_RATE_LIMIT = { rate: 1, burst: 5 };
+const TOKEN_RATE = { rate: 1, burst: 10 };
 const USER_AGENT = "amazon-seller-mcp/0.1 (Language=TypeScript)";
 
 export class SpApiClient {
   private readonly buckets = new Map<string, TokenBucket>();
+  private readonly rdtCache = new Map<string, { token: string; expiresAt: number }>();
 
   constructor(
     private readonly endpoints: Endpoints,
@@ -118,12 +121,21 @@ export class SpApiClient {
   private async mintRdt(
     restrictedResources: NonNullable<RequestOptions["restrictedResources"]>,
   ): Promise<string> {
+    const key = JSON.stringify(restrictedResources);
+    const now = (this.opts.clock ?? systemClock).now();
+    const cached = this.rdtCache.get(key);
+    if (cached && now < cached.expiresAt - 60_000) {
+      return cached.token;
+    }
     const res = await this.request<{ restrictedDataToken: string; expiresIn: number }>({
       operation: "createRestrictedDataToken",
       method: "POST",
       path: "/tokens/2021-03-01/restrictedDataToken",
       body: { restrictedResources },
+      rateLimit: TOKEN_RATE,
     });
-    return res.restrictedDataToken;
+    const token = res.restrictedDataToken;
+    this.rdtCache.set(key, { token, expiresAt: now + res.expiresIn * 1000 });
+    return token;
   }
 }
