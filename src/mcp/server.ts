@@ -11,6 +11,9 @@ import { registerPricingTools } from "./tools/pricing";
 import { registerFeesTools } from "./tools/fees";
 import { registerReportsTools } from "./tools/reports";
 import { registerFeedsTools } from "./tools/feeds";
+import { registerFinancesTools } from "./tools/finances";
+import { registerSalesTools } from "./tools/sales";
+import { registerNotificationsTools } from "./tools/notifications";
 
 export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer {
   const server = new McpServer({ name: "amazon-seller-mcp", version: "0.1.0" });
@@ -24,6 +27,9 @@ export function buildServer(client: SpApiClient, config: SpApiConfig): McpServer
   registerFeesTools(server, client, config);
   registerReportsTools(server, client, config);
   registerFeedsTools(server, client, config);
+  registerFinancesTools(server, client, config);
+  registerSalesTools(server, client, config);
+  registerNotificationsTools(server, client, config);
 
   return server;
 }
