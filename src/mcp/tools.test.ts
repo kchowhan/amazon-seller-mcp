@@ -302,6 +302,15 @@ describe("inventoryGetFbaTool", () => {
     const result = await inventoryGetFbaTool(client, config, {});
     expect(result.isError).toBe(true);
   });
+
+  it("serializes details=false as the string \"false\" in the query", async () => {
+    const request = vi.fn().mockResolvedValue({ payload: { inventorySummaries: [] } });
+    const client = { request } as unknown as SpApiClient;
+
+    await inventoryGetFbaTool(client, config, { details: false });
+    const opts = request.mock.calls[0]![0];
+    expect(opts.query.details).toBe("false");
+  });
 });
 
 describe("pricingGetCompetitiveTool", () => {
@@ -333,6 +342,40 @@ describe("pricingGetCompetitiveTool", () => {
 
     const result = await pricingGetCompetitiveTool(client, config, { asins: ["B001"] });
     expect(result.isError).toBe(true);
+  });
+
+  it("returns isError when both asins and skus are provided", async () => {
+    const request = vi.fn();
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetCompetitiveTool(client, config, {
+      asins: ["B001"],
+      skus: ["MY-SKU"],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain("not both");
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("returns isError when neither asins nor skus are provided", async () => {
+    const request = vi.fn();
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetCompetitiveTool(client, config, {});
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain("provide asins or skus");
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("passes ItemType=Sku and Skus in query when only skus provided", async () => {
+    const request = vi.fn().mockResolvedValue({ payload: [] });
+    const client = { request } as unknown as SpApiClient;
+
+    const result = await pricingGetCompetitiveTool(client, config, { skus: ["MY-SKU"] });
+    expect(result.isError).toBeUndefined();
+    const opts = request.mock.calls[0]![0];
+    expect(opts.query.ItemType).toBe("Sku");
+    expect(opts.query.Skus).toEqual(["MY-SKU"]);
   });
 });
 

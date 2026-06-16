@@ -14,7 +14,6 @@ export interface SearchCatalogItemsParams {
   identifiersType?: string;
   includedData?: string[];
   locale?: string;
-  sellerId?: string;
   brandNames?: string[];
   classificationIds?: string[];
   pageSize?: number;
@@ -44,7 +43,6 @@ export async function searchCatalogItems(
       identifiersType: params.identifiersType,
       includedData: params.includedData,
       locale: params.locale,
-      sellerId: params.sellerId,
       brandNames: params.brandNames,
       classificationIds: params.classificationIds,
       pageSize: params.pageSize,

@@ -36,6 +36,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     region,
     marketplaceIds,
     sandbox: (env.SPAPI_SANDBOX ?? "false").toLowerCase() === "true",
-    sellerId: env.SPAPI_SELLER_ID || undefined,
+    sellerId: env.SPAPI_SELLER_ID || undefined, // blank string treated as absent
   };
 }

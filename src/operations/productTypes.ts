@@ -9,7 +9,6 @@ const RATE_LIMIT = { rate: 5, burst: 10 };
 export interface GetDefinitionsProductTypeParams {
   productType: string;
   marketplaceIds: string[];
-  sellerId?: string;
   productTypeVersion?: string;
   requirements?: string;
   requirementsEnforced?: string;
@@ -26,7 +25,6 @@ export async function getDefinitionsProductType(
     path: `/definitions/2020-09-01/productTypes/${params.productType}`,
     query: {
       marketplaceIds: params.marketplaceIds,
-      sellerId: params.sellerId,
       productTypeVersion: params.productTypeVersion,
       requirements: params.requirements,
       requirementsEnforced: params.requirementsEnforced,

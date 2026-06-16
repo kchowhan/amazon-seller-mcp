@@ -290,6 +290,12 @@ export async function pricingGetCompetitiveTool(
     marketplaceId?: string;
   },
 ): Promise<ToolResult> {
+  if (args.asins?.length && args.skus?.length) {
+    return errorResult(new Error("provide either asins or skus, not both"));
+  }
+  if (!args.asins?.length && !args.skus?.length) {
+    return errorResult(new Error("provide asins or skus"));
+  }
   try {
     const result = await getCompetitivePricing(client, {
       MarketplaceId: args.marketplaceId ?? config.marketplaceIds[0]!,
