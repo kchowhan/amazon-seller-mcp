@@ -3,7 +3,7 @@
 - Status: Approved design, pre-implementation
 - Date: 2026-06-16
 - Repo: amazon-seller-mcp
-- Author: Kuldeep (with Claude)
+- Author: kchowhan (with Claude)
 
 ## 1. Summary
 
@@ -27,7 +27,7 @@ scoped to the 3P seller surface.
   use the server through their own AI client.
 - Be compliant with Amazon's Data Protection Policy (DPP) so it can hold
   production access to restricted (PII) roles.
-- Get usable value into Portar's own hands early, before the slow external
+- Get usable value into your own hands early, before the slow external
   approval gates clear.
 
 ### Non-goals (for now)
@@ -129,7 +129,7 @@ the DPP, which is verified by audit:
   and prebuilt SDKs (incl. JavaScript). We generate a typed client from the
   models rather than hand-writing endpoints.
 - A sandbox environment (static and dynamic modes) allows testing without real
-  seller data. Phase 0 also self-authorizes against Portar's real account for
+  seller data. Phase 0 also self-authorizes against your real account for
   live validation.
 
 ## 5. Architecture
@@ -308,13 +308,13 @@ Account:
 ## 10. Phased delivery plan
 
 ### Phase 0: sandbox and self-authorized single-tenant tool layer
-- Register a developer account and a draft app; self-authorize against Portar's
+- Register a developer account and a draft app; self-authorize against your
   own seller account.
 - Build the SP-API client core (auth, refresh, rate limiting) and the Phase 1
-  non-PII tools; test against the sandbox and Portar's real account.
+  non-PII tools; test against the sandbox and your real account.
 - No MCP OAuth and no hosting yet. A local stdio MCP reading credentials from the
   environment is acceptable for this phase.
-- Exit criteria: the cheap-lane tools work end to end against Portar's real
+- Exit criteria: the cheap-lane tools work end to end against your real
   account; client core has unit and contract tests passing.
 
 ### Phase 1: hosted multi-tenant, MCP OAuth, non-PII capabilities
@@ -343,7 +343,7 @@ Account:
   token-bucket accounting, 429 backoff, error typing.
 - Contract tests against the SP-API sandbox (static and dynamic modes).
 - Auth-layer tests for the consent registry and the confused-deputy mitigations.
-- Phase 0 live validation against Portar's real seller account.
+- Phase 0 live validation against your real seller account.
 
 ## 12. Risks and open items
 

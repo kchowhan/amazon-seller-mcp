@@ -18,7 +18,7 @@ These are needed for live validation only. All unit tests in this plan run witho
 
 1. Register an SP-API developer account in the Solution Provider Portal.
 2. Create a **draft** application; record the LWA `client_id` and `client_secret`.
-3. **Self-authorize** the draft app against Portar's own seller account to obtain a 1-year refresh token.
+3. **Self-authorize** the draft app against your own seller account to obtain a 1-year refresh token.
 4. Note the North America marketplace ID(s) (e.g. US is `ATVPDKIKX0DER`).
 5. Confirm sandbox base host: `https://sandbox.sellingpartnerapi-na.amazon.com`.
 
