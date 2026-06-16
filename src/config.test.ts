@@ -34,4 +34,14 @@ describe("loadConfig", () => {
   it("throws on an invalid region", () => {
     expect(() => loadConfig({ ...base, SPAPI_REGION: "mars" })).toThrow(/region/i);
   });
+
+  it("parses SPAPI_SELLER_ID when present", () => {
+    const cfg = loadConfig({ ...base, SPAPI_SELLER_ID: "A1B2C3D4E5F6G7" });
+    expect(cfg.sellerId).toBe("A1B2C3D4E5F6G7");
+  });
+
+  it("leaves sellerId undefined when SPAPI_SELLER_ID is absent", () => {
+    const cfg = loadConfig(base);
+    expect(cfg.sellerId).toBeUndefined();
+  });
 });

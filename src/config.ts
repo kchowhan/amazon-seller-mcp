@@ -8,6 +8,7 @@ export interface SpApiConfig {
   region: Region;
   marketplaceIds: string[];
   sandbox: boolean;
+  sellerId?: string;
 }
 
 const REGIONS: Region[] = ["na", "eu", "fe"];
@@ -35,5 +36,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     region,
     marketplaceIds,
     sandbox: (env.SPAPI_SANDBOX ?? "false").toLowerCase() === "true",
+    sellerId: env.SPAPI_SELLER_ID || undefined,
   };
 }
